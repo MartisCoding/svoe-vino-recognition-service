@@ -80,7 +80,7 @@ services:
 
   backend:
     build:
-      context: ./vino-back
+      context: ./backend
       dockerfile: Dockerfile.template
     container_name: ${PROJECT_NAME:-vino-service}-backend
     restart: unless-stopped
