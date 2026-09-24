@@ -1,0 +1,77 @@
+{
+  "project_name": "vino-service",
+
+  "postgres": {
+    "image_tag": "16-alpine",
+    "port": 5432,
+    "db": "mydb",
+    "user": "postgres",
+    "password": "postgres"
+  },
+
+  "minio": {
+    "image_tag": "latest",
+    "api_port": 9000,
+    "console_port": 9001,
+    "root_user": "minioadmin",
+    "root_password": "minioadmin",
+    "image_bucket": "images",
+    "secure": false,
+    "image_prefix": "client"
+  },
+
+  "rabbitmq": {
+    "image_tag": "3.13-management",
+    "port": 5672,
+    "management_port": 15672,
+    "user": "guest",
+    "password": "guest",
+    "vhost": "/",
+    "recognition_queue": "recognition.tasks",
+    "result_queue": "recognition.results",
+    "inference_prefetch_count": 1,
+    "inference_url": "amqp://guest:guest@rabbitmq:5672/"
+  },
+
+  "qdrant": {
+    "image_tag": "latest",
+    "port": 6333,
+    "grpc_port": 6334,
+    "prefer_grpc": false,
+    "collection_name": "wines"
+  },
+
+  "inference": {
+    "build_context": "./vino-inference",
+    "dockerfile": "Dockerfile",
+    "model_weights_path": "/app/best_arcface_model.pth",
+    "yolo_weights_path": "/app/best.pt",
+    "embedding_size": 512,
+    "image_size": 224,
+    "device": "cuda:0"
+  },
+
+  "backend": {
+    "port": 8080,
+    "internal_port": 8080,
+    "app_name": "vino-service",
+    "app_version": "0.1.0",
+    "debug": false,
+    "title": "vino-back",
+
+    "parser_base_url": "https://vino-svoe.ru",
+    "parser_timeout": 10,
+    "parser_max_retries": 3,
+    "parser_retry_delay": 1,
+
+    "logging_level": "INFO",
+    "logging_logs_directory": "./logs/",
+    "logging_file": "",
+    "logging_serialize": false
+  },
+
+  "compose": {
+    "detach": true,
+    "build": true
+  }
+}
