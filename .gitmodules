@@ -1,6 +1,3 @@
-[submodule "vino-back"]
-	path = vino-back
-	url = https://github.com/MartisCoding/vino-back.git
 [submodule "backend"]
 	path = backend
 	url = https://github.com/MartisCoding/vino-back.git
