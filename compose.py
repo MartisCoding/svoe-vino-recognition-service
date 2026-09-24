@@ -24,6 +24,7 @@ DEFAULTS: dict[str, Any] = {
         "console_port": 9001,
         "root_user": "minioadmin",
         "root_password": "minioadmin",
+        "license_path": "./licenses/minio.license",
         "image_bucket": "images",
         "secure": False,
         "image_prefix": "client",
@@ -36,8 +37,8 @@ DEFAULTS: dict[str, Any] = {
         "user": "guest",
         "password": "guest",
         "vhost": "/",
-        "recognition_queue": "recognition.tasks",
-        "result_queue": "recognition.results",
+        "task_publish_queue": "recognition.tasks",
+        "task_result_queue": "recognition.results",
         "inference_prefetch_count": 1,
         "inference_url": "amqp://guest:guest@rabbitmq:5672/",
     },
@@ -131,6 +132,7 @@ def render_env(config: dict[str, Any]) -> str:
         "MINIO_CONSOLE_PORT": str(minio["console_port"]),
         "MINIO_ROOT_USER": str(minio["root_user"]),
         "MINIO_ROOT_PASSWORD": str(minio["root_password"]),
+        "MINIO_LICENSE_PATH": str(minio["license_path"]),
         "MINIO_IMAGE_BUCKET": str(minio["image_bucket"]),
         "MINIO_SECURE": to_bool_str(bool(minio["secure"])),
         "MINIO_IMAGE_PREFIX": str(minio["image_prefix"]),
@@ -143,11 +145,11 @@ def render_env(config: dict[str, Any]) -> str:
         "RABBITMQ_DEFAULT_USER": str(rabbitmq["user"]),
         "RABBITMQ_DEFAULT_PASS": str(rabbitmq["password"]),
         "RABBITMQ_DEFAULT_VHOST": str(rabbitmq["vhost"]),
-        "RABBITMQ_RECOGNITION_QUEUE": str(
-            rabbitmq["recognition_queue"]
+        "RABBITMQ_TASK_PUBLISH_QUEUE": str(
+            rabbitmq["task_publish_queue"]
         ),
-        "RABBITMQ_RESULT_QUEUE": str(
-            rabbitmq["result_queue"]
+        "RABBITMQ_TASK_RESULT_QUEUE": str(
+            rabbitmq["task_result_queue"]
         ),
         "RABBITMQ_INFERENCE_PREFETCH_COUNT": str(
             rabbitmq["inference_prefetch_count"]

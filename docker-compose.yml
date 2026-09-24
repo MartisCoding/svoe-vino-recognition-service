@@ -22,10 +22,10 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:${MINIO_IMAGE_TAG:-latest}
+    image: quay.io/minio/aistor/minio:${MINIO_IMAGE_TAG:-latest}
     container_name: ${PROJECT_NAME:-vino-service}-minio
     restart: unless-stopped
-    command: server /data --console-address ":9001"
+    command: server /data --console-address ":9001" --license /licenses/minio.license
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -34,6 +34,7 @@ services:
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
+      - ${MINIO_LICENSE_PATH:-./licenses}:/licenses:ro
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -80,8 +81,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.template
+      context: .\backend
+      dockerfile: .dockerfile
     container_name: ${PROJECT_NAME:-vino-service}-backend
     restart: unless-stopped
     depends_on:
@@ -117,7 +118,8 @@ services:
       RABBITMQ__USER: ${RABBITMQ_DEFAULT_USER:-guest}
       RABBITMQ__PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
       RABBITMQ__VIRTUAL_HOST: ${RABBITMQ_DEFAULT_VHOST:-/}
-      RABBITMQ__RECOGNITION_QUEUE: ${RABBITMQ_RECOGNITION_QUEUE:-recognition.tasks}
+      RABBITMQ__TASK_PUBLISH_QUEUE: ${RABBITMQ_TASK_PUBLISH_QUEUE:-recognition.tasks}
+      RABBITMQ__TASK_RESULT_QUEUE: ${RABBITMQ_TASK_RESULT_QUEUE:-recognition.results}
 
       PARSER__BASE_URL: ${PARSER_BASE_URL:-https://vino-svoe.ru}
       PARSER__TIMEOUT: ${PARSER_TIMEOUT:-10}
@@ -133,8 +135,8 @@ services:
 
   inference:
     build:
-      context: ${INFERENCE_BUILD_CONTEXT:-./vino-inference}
-      dockerfile: ${INFERENCE_DOCKERFILE:-Dockerfile}
+      context: ${INFERENCE_BUILD_CONTEXT:-./inference}
+      dockerfile: ${INFERENCE_DOCKERFILE:-.dockerfile}
     container_name: ${PROJECT_NAME:-vino-service}-inference
     restart: unless-stopped
     depends_on:

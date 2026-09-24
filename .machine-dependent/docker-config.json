@@ -15,7 +15,7 @@
     "console_port": 9001,
     "root_user": "minioadmin",
     "root_password": "minioadmin",
-    "license_path": "./licenses/minio.license",
+    "license_path": ".\\.machine-dependent\\licenses",
     "image_bucket": "images",
     "secure": false,
     "image_prefix": "client"
@@ -25,13 +25,13 @@
     "image_tag": "3.13-management",
     "port": 5672,
     "management_port": 15672,
-    "user": "guest",
-    "password": "guest",
+    "user": "svie-vino-rmq-backend",
+    "password": "svoe-vino-rmq-rec",
     "vhost": "/",
-    "recognition_queue": "recognition.tasks",
-    "result_queue": "recognition.results",
+    "task_publish_queue": "recognition.tasks",
+    "task_result_queue": "recognition.results",
     "inference_prefetch_count": 1,
-    "inference_url": "amqp://guest:guest@rabbitmq:5672/"
+    "inference_url": "amqp://svie-vino-rmq-backend:svoe-vino-rmq-rec@rabbitmq:5672/"
   },
 
   "qdrant": {
@@ -43,10 +43,10 @@
   },
 
   "inference": {
-    "build_context": "./inference",
-    "dockerfile": "Dockerfile",
-    "model_weights_path": "/app/best_arcface_model.pth",
-    "yolo_weights_path": "/app/best.pt",
+    "build_context": ".\\inference",
+    "dockerfile": ".dockerfile",
+    "model_weights_path": "/app/models/ArcFace_v2.pth",
+    "yolo_weights_path": "/app/models/YOLO_best_100.pt",
     "embedding_size": 512,
     "image_size": 224,
     "device": "cuda:0"
