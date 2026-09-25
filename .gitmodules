@@ -4,3 +4,6 @@
 [submodule "inference"]
 	path = inference
 	url = https://github.com/HungryM1NT/SvoeVino
+[submodule "ocr_inference"]
+	path = ocr_inference
+	url = https://github.com/VovaGal/wine.git
