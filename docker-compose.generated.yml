@@ -1,0 +1,234 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vino-service-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: svoe-vino-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+    - 5432:5432
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U postgres -d svoe-vino-db
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  minio:
+    image: quay.io/minio/aistor/minio:latest
+    container_name: vino-service-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001" --license /licenses/minio.license
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+    - 9000:9000
+    - 9001:9001
+    volumes:
+    - minio_data:/data
+    - .\.machine-dependent\licenses:/licenses:ro
+    healthcheck:
+      test:
+      - CMD
+      - mc
+      - ready
+      - local
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: vino-service-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_VHOST: /
+    ports:
+    - 5672:5672
+    - 15672:15672
+    volumes:
+    - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test:
+      - CMD
+      - rabbitmq-diagnostics
+      - -q
+      - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: vino-service-qdrant
+    restart: unless-stopped
+    ports:
+    - 6333:6333
+    - 6334:6334
+    volumes:
+    - qdrant_data:/qdrant/storage
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -f http://localhost:6333/healthz || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  backend:
+    build:
+      context: ./backend
+      dockerfile: .dockerfile
+    container_name: vino-service-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      APP_NAME: vino-service
+      APP_VERSION: 0.1.0
+      FASTAPI__HOST: 0.0.0.0
+      FASTAPI__PORT: '8080'
+      FASTAPI__DEBUG: 'false'
+      FASTAPI__TITLE: vino-back
+      DATABASE__HOST: postgres
+      DATABASE__PORT: '5432'
+      DATABASE__USER: postgres
+      DATABASE__PASSWORD: postgres
+      DATABASE__DATABASE: svoe-vino-db
+      MINIO__HOST: minio
+      MINIO__PORT: '9000'
+      MINIO__ACCESS_KEY: minioadmin
+      MINIO__SECRET_KEY: minioadmin
+      MINIO__IMAGE_BUCKET: images
+      RABBITMQ__HOST: rabbitmq
+      RABBITMQ__PORT: '5672'
+      RABBITMQ__USER: guest
+      RABBITMQ__PASSWORD: guest
+      RABBITMQ__VIRTUAL_HOST: /
+      RABBITMQ__INFERENCE_WORKER__WORKER_NAME: cv_inference_worker
+      RABBITMQ__INFERENCE_WORKER__PUBLISH_QUEUE: cv.recognition.requests
+      RABBITMQ__INFERENCE_WORKER__CONSUME_QUEUE: cv.recognition.results
+      RABBITMQ__INFERENCE_OCR_WORKER__WORKER_NAME: ocr_inference_worker
+      RABBITMQ__INFERENCE_OCR_WORKER__PUBLISH_QUEUE: ocr.recognition.tasks
+      RABBITMQ__INFERENCE_OCR_WORKER__CONSUME_QUEUE: ocr.recognition.results
+      PARSER__BASE_URL: https://vino-svoe.ru
+      PARSER__TIMEOUT: '10'
+      PARSER__MAX_RETRIES: '3'
+      PARSER__RETRY_DELAY: '1'
+      LOGGING__LEVEL: INFO
+      LOGGING__LOGS_DIRECTORY: ./logs/
+      LOGGING__FILE: ''
+      LOGGING__SERIALIZE: 'false'
+    ports:
+    - 8080:8080
+  inference:
+    build:
+      context: .\inference
+      dockerfile: .dockerfile
+    container_name: vino-service-inference
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    environment:
+      WORKER_NAME: cv_inference_worker
+      WORKER_VERSION: 0.0.1
+      INFERENCE__MODEL_WEIGHTS_PATH: /app/models/ArcFace_v2.pth
+      INFERENCE__YOLO_WEIGHTS_PATH: /app/models/YOLO_best_100.pt
+      INFERENCE__EMBEDDING_SIZE: '512'
+      INFERENCE__IMAGE_SIZE: '224'
+      INFERENCE__DEVICE: cuda:0
+      INFERENCE__DATASET_DIR: /app/dataset/train
+      QDRANT__USE_LOCAL_PATH: 'false'
+      QDRANT__HOST: qdrant
+      QDRANT__PORT: '6333'
+      QDRANT__GRPC_PORT: '6334'
+      QDRANT__PREFER_GRPC: 'false'
+      QDRANT__COLLECTION_NAME: wines
+      RABBITMQ__HOST: rabbitmq
+      RABBITMQ__PORT: '5672'
+      RABBITMQ__USERNAME: guest
+      RABBITMQ__PASSWORD: guest
+      RABBITMQ__PUBLISH_QUEUE: cv.recognition.requests
+      RABBITMQ__CONSUME_QUEUE: cv.recognition.results
+      RABBITMQ__PREFETCH_COUNT: '1'
+      MINIO__ENDPOINT: minio:9000
+      MINIO__ACCESS_KEY: minioadmin
+      MINIO__SECRET_KEY: minioadmin
+      MINIO__SECURE: 'false'
+      MINIO__IMAGE_BUCKET: images
+      LOGGING__LEVEL: INFO
+      LOGGING__LOGS_DIRECTORY: ./logs/
+      LOGGING__FILE: ''
+      LOGGING__SERIALIZE: 'false'
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            count: 1
+            capabilities:
+            - gpu
+  ocr-inference:
+    build:
+      context: .\ocr_inference
+      dockerfile: .dockerfile
+    container_name: vino-service-ocr-inference
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      WORKER_NAME: ocr_inference_worker
+      WORKER_VERSION: 0.0.1
+      INFERENCE__CATALOG_PATH: /app/dataset/wine_catalog.jsonl
+      INFERENCE__CHECKPOINT_PATH: /app/dataset/parseq_wine_best.pt
+      INFERENCE__DEVICE: cuda:0
+      INFERENCE__CRAFT_CANVAS_SIZE: '2560'
+      INFERENCE__RECOGNITION_PASSES: '3'
+      INFERENCE__ALLOW_MULTILINGUAL: 'true'
+      INFERENCE__TOP_K: '5'
+      RABBITMQ__HOST: rabbitmq
+      RABBITMQ__PORT: '5672'
+      RABBITMQ__USERNAME: guest
+      RABBITMQ__PASSWORD: guest
+      RABBITMQ__PUBLISH_QUEUE: ocr.recognition.tasks
+      RABBITMQ__CONSUME_QUEUE: ocr.recognition.results
+      RABBITMQ__PREFETCH_COUNT: '1'
+      MINIO__ENDPOINT: minio:9000
+      MINIO__ACCESS_KEY: minioadmin
+      MINIO__SECRET_KEY: minioadmin
+      MINIO__SECURE: 'false'
+      MINIO__IMAGE_BUCKET: images
+      LOGGING__LEVEL: INFO
+      LOGGING__LOGS_DIRECTORY: ./logs/
+      LOGGING__FILE: ''
+      LOGGING__SERIALIZE: 'false'
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            count: 1
+            capabilities:
+            - gpu
+volumes:
+  postgres_data: null
+  minio_data: null
+  rabbitmq_data: null
+  qdrant_data: null

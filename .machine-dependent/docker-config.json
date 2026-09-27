@@ -30,8 +30,12 @@
     "vhost": "/",
     "task_publish_queue": "recognition.tasks",
     "task_result_queue": "recognition.results",
+    "ocr_task_publish_queue": "ocr.recognition.tasks",
+    "ocr_task_result_queue": "ocr.recognition.results",
     "inference_prefetch_count": 1,
-    "inference_url": "amqp://svie-vino-rmq-backend:svoe-vino-rmq-rec@rabbitmq:5672/"
+    "ocr_prefetch_count": 1,
+    "inference_url": "amqp://svie-vino-rmq-backend:svoe-vino-rmq-rec@rabbitmq:5672/",
+    "ocr_url": "amqp://svie-vino-rmq-backend:svoe-vino-rmq-rec@rabbitmq:5672/"
   },
 
   "qdrant": {
@@ -50,6 +54,18 @@
     "embedding_size": 512,
     "image_size": 224,
     "device": "cuda:0"
+  },
+
+  "ocr_inference": {
+    "build_context": ".\\ocr_inference",
+    "dockerfile": ".dockerfile",
+    "catalog_path": "/app/dataset/wine_catalog.jsonl",
+    "checkpoint_path": "/app/weights/parseq_wine_best.pt",
+    "device": "cuda:0",
+    "craft_canvas_size": 2560,
+    "recognition_passes": 3,
+    "allow_multilingual": true,
+    "top_k": 5
   },
 
   "backend": {

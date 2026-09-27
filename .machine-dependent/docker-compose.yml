@@ -147,8 +147,8 @@ services:
       qdrant:
         condition: service_healthy
     environment:
-      INFERENCE__MODEL_WEIGHTS_PATH: ${INFERENCE_MODEL_WEIGHTS_PATH:-/app/best_arcface_model.pth}
-      INFERENCE__YOLO_WEIGHTS_PATH: ${INFERENCE_YOLO_WEIGHTS_PATH:-/app/best.pt}
+      INFERENCE__MODEL_WEIGHTS_PATH: ${INFERENCE_MODEL_WEIGHTS_PATH:-/app/models/ArcFace_v2.pth}
+      INFERENCE__YOLO_WEIGHTS_PATH: ${INFERENCE_YOLO_WEIGHTS_PATH:-/app/models/YOLO_best_100.pt}
       INFERENCE__EMBEDDING_SIZE: ${INFERENCE_EMBEDDING_SIZE:-512}
       INFERENCE__IMAGE_SIZE: ${INFERENCE_IMAGE_SIZE:-224}
       INFERENCE__DEVICE: ${INFERENCE_DEVICE:-cuda:0}
@@ -164,6 +164,47 @@ services:
       RABBITMQ__CONSUME_QUEUE: ${RABBITMQ_RECOGNITION_QUEUE:-recognition.tasks}
       RABBITMQ__PUBLISH_QUEUE: ${RABBITMQ_RESULT_QUEUE:-recognition.results}
       RABBITMQ__PREFETCH_COUNT: ${RABBITMQ_INFERENCE_PREFETCH_COUNT:-1}
+
+      MINIO__ENDPOINT: minio:9000
+      MINIO__ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO__SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO__SECURE: ${MINIO_SECURE:-false}
+      MINIO__IMAGE_BUCKET: ${MINIO_IMAGE_BUCKET:-images}
+      MINIO__IMAGE_PREFIX: ${MINIO_IMAGE_PREFIX:-client}
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu
+
+  ocr-inference:
+    build:
+      context: ${OCR_INFERENCE_BUILD_CONTEXT:-./ocr_inference}
+      dockerfile: ${OCR_INFERENCE_DOCKERFILE:-.dockerfile}
+    container_name: ${PROJECT_NAME:-vino-service}-ocr-inference
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      INFERENCE__CATALOG_PATH: ${OCR_INFERENCE_CATALOG_PATH:-/app/dataset/wine_catalog.jsonl}
+      INFERENCE__CHECKPOINT_PATH: ${OCR_INFERENCE_CHECKPOINT_PATH:-/app/weights/parseq_wine_best.pt}
+      INFERENCE__DEVICE: ${OCR_INFERENCE_DEVICE:-cuda:0}
+      INFERENCE__CRAFT_CANVAS_SIZE: ${OCR_INFERENCE_CRAFT_CANVAS_SIZE:-2560}
+      INFERENCE__RECOGNITION_PASSES: ${OCR_INFERENCE_RECOGNITION_PASSES:-3}
+      INFERENCE__ALLOW_MULTILINGUAL: ${OCR_INFERENCE_ALLOW_MULTILINGUAL:-true}
+      INFERENCE__TOP_K: ${OCR_INFERENCE_TOP_K:-5}
+
+      RABBITMQ__URL: ${RABBITMQ_OCR_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ__TASK_PUBLISH_QUEUE: ${RABBITMQ_OCR_TASK_PUBLISH_QUEUE:-ocr.recognition.tasks}
+      RABBITMQ__TASK_RESULT_QUEUE: ${RABBITMQ_OCR_TASK_RESULT_QUEUE:-ocr.recognition.results}
+      RABBITMQ__PREFETCH_COUNT: ${RABBITMQ_OCR_PREFETCH_COUNT:-1}
 
       MINIO__ENDPOINT: minio:9000
       MINIO__ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}

@@ -1,0 +1,127 @@
+{
+  "project_name": "vino-service",
+  "compose": {
+    "detach": true,
+    "build": true
+  },
+  "postgres": {
+    "image_tag": "16-alpine",
+    "port": 5432,
+    "db": "svoe-vino-db",
+    "user": "postgres",
+    "password": "postgres"
+  },
+  "minio": {
+    "image_tag": "latest",
+    "api_port": 9000,
+    "console_port": 9001,
+    "license_path": ".\\.machine-dependent\\licenses",
+    "root_user": "minioadmin",
+    "root_password": "minioadmin",
+    "host": "minio",
+    "port": 9000,
+    "image_bucket": "images",
+    "secure": false
+  },
+  "rabbitmq": {
+    "image_tag": "3.13-management",
+    "port": 5672,
+    "management_port": 15672,
+    "vhost": "/",
+    "host": "rabbitmq"
+  },
+  "qdrant": {
+    "image_tag": "latest",
+    "port": 6333,
+    "grpc_port": 6334,
+    "prefer_grpc": false,
+    "collection_name": "wines",
+    "host": "qdrant"
+  },
+  "queues": {
+    "cv": {
+      "tasks": "cv.recognition.requests",
+      "results": "cv.recognition.results"
+    },
+    "ocr": {
+      "tasks": "ocr.recognition.tasks",
+      "results": "ocr.recognition.results"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "logs_directory": "./logs/",
+    "file": "",
+    "serialize": false
+  },
+  "backend": {
+    "app_name": "vino-service",
+    "app_version": "0.1.0",
+    "port": 8080,
+    "internal_port": 8080,
+    "debug": false,
+    "title": "vino-back",
+    "database": {
+      "user": "postgres",
+      "password": "postgres"
+    },
+    "minio": {
+      "access_key": "minioadmin",
+      "secret_key": "minioadmin"
+    },
+    "rabbitmq": {
+      "user": "guest",
+      "password": "guest"
+    },
+    "parser": {
+      "base_url": "https://vino-svoe.ru",
+      "timeout": 10,
+      "max_retries": 3,
+      "retry_delay": 1
+    }
+  },
+  "inference": {
+    "build_context": ".\\inference",
+    "dockerfile": ".dockerfile",
+    "worker_name": "cv_inference_worker",
+    "worker_version": "0.0.1",
+    "model_weights_path": "/app/models/ArcFace_v2.pth",
+    "yolo_weights_path": "/app/models/YOLO_best_100.pt",
+    "embedding_size": 512,
+    "image_size": 224,
+    "device": "cuda:0",
+    "dataset_dir": "/app/dataset/train",
+    "use_local_path": false,
+    "prefetch_count": 1,
+    "minio": {
+      "access_key": "minioadmin",
+      "secret_key": "minioadmin"
+    },
+    "rabbitmq": {
+      "username": "guest",
+      "password": "guest"
+    }
+  },
+  "ocr_inference": {
+    "build_context": ".\\ocr_inference",
+    "dockerfile": ".dockerfile",
+    "worker_name": "ocr_inference_worker",
+    "worker_version": "0.0.1",
+    "catalog_path": "/app/dataset/wine_catalog.jsonl",
+    "checkpoint_path": "/app/dataset/parseq_wine_best.pt",
+    "device": "cuda:0",
+    "craft_canvas_size": 2560,
+    "recognition_passes": 3,
+    "allow_multilingual": true,
+    "top_k": 5,
+    "prefetch_count": 1,
+    "minio": {
+      "access_key": "minioadmin",
+      "secret_key": "minioadmin"
+    },
+    "rabbitmq": {
+      "username": "guest",
+      "password": "guest"
+    }
+  }
+}
