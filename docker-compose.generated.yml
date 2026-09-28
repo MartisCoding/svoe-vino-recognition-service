@@ -120,11 +120,11 @@ services:
       RABBITMQ__INFERENCE_OCR_WORKER__WORKER_NAME: ocr_inference_worker
       RABBITMQ__INFERENCE_OCR_WORKER__PUBLISH_QUEUE: ocr.recognition.tasks
       RABBITMQ__INFERENCE_OCR_WORKER__CONSUME_QUEUE: ocr.recognition.results
-      PARSER__BASE_URL: https://vino-svoe.ru
+      PARSER__BASE_URL: https://vino-svoe.ru/wines
       PARSER__TIMEOUT: '10'
       PARSER__MAX_RETRIES: '3'
       PARSER__RETRY_DELAY: '1'
-      LOGGING__LEVEL: INFO
+      LOGGING__LEVEL: DEBUG
       LOGGING__LOGS_DIRECTORY: ./logs/
       LOGGING__FILE: ''
       LOGGING__SERIALIZE: 'false'
@@ -170,7 +170,7 @@ services:
       MINIO__SECRET_KEY: minioadmin
       MINIO__SECURE: 'false'
       MINIO__IMAGE_BUCKET: images
-      LOGGING__LEVEL: INFO
+      LOGGING__LEVEL: DEBUG
       LOGGING__LOGS_DIRECTORY: ./logs/
       LOGGING__FILE: ''
       LOGGING__SERIALIZE: 'false'
@@ -215,7 +215,7 @@ services:
       MINIO__SECRET_KEY: minioadmin
       MINIO__SECURE: 'false'
       MINIO__IMAGE_BUCKET: images
-      LOGGING__LEVEL: INFO
+      LOGGING__LEVEL: DEBUG
       LOGGING__LOGS_DIRECTORY: ./logs/
       LOGGING__FILE: ''
       LOGGING__SERIALIZE: 'false'

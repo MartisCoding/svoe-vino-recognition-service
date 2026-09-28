@@ -49,7 +49,7 @@
     }
   },
   "logging": {
-    "level": "INFO",
+    "level": "DEBUG",
     "logs_directory": "./logs/",
     "file": "",
     "serialize": false
@@ -74,7 +74,7 @@
       "password": "guest"
     },
     "parser": {
-      "base_url": "https://vino-svoe.ru",
+      "base_url": "https://vino-svoe.ru/wines",
       "timeout": 10,
       "max_retries": 3,
       "retry_delay": 1
