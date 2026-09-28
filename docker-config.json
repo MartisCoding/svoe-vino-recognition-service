@@ -61,6 +61,7 @@
     "internal_port": 8080,
     "debug": false,
     "title": "vino-back",
+    "path_to_catalog": "./catalog.jsonl",
     "database": {
       "user": "postgres",
       "password": "postgres"

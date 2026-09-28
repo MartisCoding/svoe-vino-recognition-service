@@ -95,6 +95,7 @@ DEFAULTS: dict[str, Any] = {
         "internal_port": 8080,
         "debug": False,
         "title": "vino-back",
+        "path_to_catalog": "./catalog.jsonl",
         # credentials: not hoisted even though they equal the infra services' own creds
         "database": {"user": "postgres", "password": "postgres"},
         "minio": {"access_key": "minioadmin", "secret_key": "minioadmin"},
@@ -281,6 +282,7 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
                 {
                     "APP_NAME": backend["app_name"],
                     "APP_VERSION": backend["app_version"],
+                    "PATH_TO_CATALOG": backend["path_to_catalog"],
                     "FASTAPI__HOST": "0.0.0.0",
                     "FASTAPI__PORT": backend["internal_port"],
                     "FASTAPI__DEBUG": backend["debug"],

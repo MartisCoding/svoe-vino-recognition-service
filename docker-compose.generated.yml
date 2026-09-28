@@ -95,6 +95,7 @@ services:
     environment:
       APP_NAME: vino-service
       APP_VERSION: 0.1.0
+      PATH_TO_CATALOG: ./catalog.jsonl
       FASTAPI__HOST: 0.0.0.0
       FASTAPI__PORT: '8080'
       FASTAPI__DEBUG: 'false'
