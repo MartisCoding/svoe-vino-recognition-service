@@ -2,7 +2,8 @@
   "project_name": "vino-service",
   "compose": {
     "detach": true,
-    "build": true
+    "build": true,
+    "stop_all_before_build": true
   },
   "postgres": {
     "image_tag": "16-alpine",
@@ -123,6 +124,20 @@
     "rabbitmq": {
       "username": "guest",
       "password": "guest"
+    }
+  },
+  "frontend": {
+    "build_context": ".\\frontend",
+    "dockerfile": "Dockerfile",
+    "port": 3000,
+    "internal_port": 80,
+    "vite": {
+      "VITE_API_BASE_URL": "",
+      "VITE_DEMO_MODE": false,
+      "VITE_FESTIVAL_ENABLED": false,
+      "VITE_FESTIVAL_CHANCE": 0.25,
+      "VITE_FESTIVAL_URL": "https://vino-svoe.ru/events/summer-wine-fest",
+      "VITE_FEEDBACK_ENABLED": false
     }
   }
 }
