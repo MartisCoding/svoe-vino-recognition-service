@@ -7,3 +7,6 @@
 [submodule "ocr_inference"]
 	path = ocr_inference
 	url = https://github.com/VovaGal/wine.git
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/VovaGal/wine_frontend.git

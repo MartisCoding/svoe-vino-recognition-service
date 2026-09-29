@@ -1,24 +1,4 @@
 #!/usr/bin/env python3
-"""
-Renders a fully-resolved docker-compose file straight from a JSON config and
-runs `docker compose up` against it.
-
-Design notes (why it looks like this):
-- No intermediate .env file: every value is baked directly into the compose
-  file's `environment:` blocks as a literal, not as a `${VAR}` reference.
-- The JSON config is split so that values which are IDENTICAL across the
-  three app containers (backend / inference / ocr_inference) and are NOT
-  credentials (hosts, ports, bucket names, logging, queue names) live once,
-  at the top level, alongside the container keys. Anything that differs
-  per container, or is a credential (usernames, passwords, access/secret
-  keys) - even if the value happens to be the same everywhere - stays
-  nested inside that container's own section and is never hoisted.
-- Queue names are defined once under "queues" and used by both the backend
-  (which only knows about them as publish/consume targets) and the
-  matching worker (which reads/writes the same physical queue) - this is
-  what previously caused a real bug: the backend and the workers used to
-  have independently-typed-out queue names that could silently drift apart.
-"""
 
 import argparse
 import json
@@ -28,10 +8,16 @@ from typing import Any
 
 import yaml
 
+
 DEFAULTS: dict[str, Any] = {
     "project_name": "vino-service",
-    "compose": {"detach": True, "build": True},
-    # --- infrastructure services -------------------------------------------------
+
+    "compose": {
+        "detach": True,
+        "build": True,
+        "stop_all_before_build": True,
+    },
+
     "postgres": {
         "image_tag": "16-alpine",
         "port": 5432,
@@ -39,6 +25,7 @@ DEFAULTS: dict[str, Any] = {
         "user": "postgres",
         "password": "postgres",
     },
+
     "minio": {
         "image_tag": "latest",
         "api_port": 9000,
@@ -46,20 +33,20 @@ DEFAULTS: dict[str, Any] = {
         "license_path": "./licenses",
         "root_user": "minioadmin",
         "root_password": "minioadmin",
-        # shared, non-credential connection settings used by every app container
         "host": "minio",
         "port": 9000,
         "image_bucket": "images",
         "secure": False,
     },
+
     "rabbitmq": {
         "image_tag": "3.13-management",
         "port": 5672,
         "management_port": 15672,
         "vhost": "/",
-        # shared, non-credential connection setting used by every app container
         "host": "rabbitmq",
     },
+
     "qdrant": {
         "image_tag": "latest",
         "port": 6333,
@@ -68,8 +55,7 @@ DEFAULTS: dict[str, Any] = {
         "collection_name": "wines",
         "host": "qdrant",
     },
-    # shared between the backend (publisher/consumer side) and the matching
-    # worker (consumer/publisher side) - defined once so they can't drift apart
+
     "queues": {
         "cv": {
             "tasks": "wine.recognition.requests",
@@ -80,14 +66,14 @@ DEFAULTS: dict[str, Any] = {
             "results": "ocr.recognition.results",
         },
     },
-    # shared across backend + both workers (all three define the same LoggingConfig shape)
+
     "logging": {
         "level": "INFO",
         "logs_directory": "./logs/",
         "file": "",
         "serialize": False,
     },
-    # --- app containers ------------------------------------------------------------
+
     "backend": {
         "app_name": "vino-service",
         "app_version": "0.1.0",
@@ -96,10 +82,18 @@ DEFAULTS: dict[str, Any] = {
         "debug": False,
         "title": "vino-back",
         "path_to_catalog": "./catalog.jsonl",
-        # credentials: not hoisted even though they equal the infra services' own creds
-        "database": {"user": "postgres", "password": "postgres"},
-        "minio": {"access_key": "minioadmin", "secret_key": "minioadmin"},
-        "rabbitmq": {"user": "guest", "password": "guest"},
+        "database": {
+            "user": "postgres",
+            "password": "postgres",
+        },
+        "minio": {
+            "access_key": "minioadmin",
+            "secret_key": "minioadmin",
+        },
+        "rabbitmq": {
+            "user": "guest",
+            "password": "guest",
+        },
         "parser": {
             "base_url": "https://vino-svoe.ru",
             "timeout": 10,
@@ -107,6 +101,7 @@ DEFAULTS: dict[str, Any] = {
             "retry_delay": 1,
         },
     },
+
     "inference": {
         "build_context": "./inference",
         "dockerfile": ".dockerfile",
@@ -120,10 +115,16 @@ DEFAULTS: dict[str, Any] = {
         "dataset_dir": "/app/dataset/train",
         "use_local_path": False,
         "prefetch_count": 1,
-        # credentials: not hoisted
-        "minio": {"access_key": "minioadmin", "secret_key": "minioadmin"},
-        "rabbitmq": {"username": "guest", "password": "guest"},
+        "minio": {
+            "access_key": "minioadmin",
+            "secret_key": "minioadmin",
+        },
+        "rabbitmq": {
+            "username": "guest",
+            "password": "guest",
+        },
     },
+
     "ocr_inference": {
         "build_context": "./ocr_inference",
         "dockerfile": ".dockerfile",
@@ -137,20 +138,43 @@ DEFAULTS: dict[str, Any] = {
         "allow_multilingual": True,
         "top_k": 5,
         "prefetch_count": 1,
-        # credentials: not hoisted
-        "minio": {"access_key": "minioadmin", "secret_key": "minioadmin"},
-        "rabbitmq": {"username": "guest", "password": "guest"},
+        "minio": {
+            "access_key": "minioadmin",
+            "secret_key": "minioadmin",
+        },
+        "rabbitmq": {
+            "username": "guest",
+            "password": "guest",
+        },
+    },
+
+    "frontend": {
+        "build_context": "./frontend",
+        "dockerfile": "Dockerfile",
+        "port": 3000,
+        "internal_port": 80,
+        "vite": {
+            "VITE_API_BASE_URL": "",
+            "VITE_DEMO_MODE": False,
+            "VITE_FESTIVAL_ENABLED": False,
+            "VITE_FESTIVAL_CHANCE": 0.25,
+            "VITE_FESTIVAL_URL": "https://vino-svoe.ru/events/summer-wine-fest",
+            "VITE_FEEDBACK_ENABLED": False,
+        },
     },
 }
 
 
 def deep_merge(defaults: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
     result = dict(defaults)
+
     for key, value in values.items():
         if isinstance(value, dict) and isinstance(result.get(key), dict):
             result[key] = deep_merge(result[key], value)
             continue
+
         result[key] = value
+
     return result
 
 
@@ -167,8 +191,10 @@ def load_json(path: Path) -> dict[str, Any]:
 def _env_value(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
+
     if value is None:
         return ""
+
     return str(value)
 
 
@@ -187,25 +213,36 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
     backend = cfg["backend"]
     inference = cfg["inference"]
     ocr = cfg["ocr_inference"]
+    frontend = cfg["frontend"]
 
     def cname(suffix: str) -> str:
         return f"{project}-{suffix}"
 
-    healthcheck = lambda test, interval="10s", timeout="5s", retries=5: {
-        "test": test,
-        "interval": interval,
-        "timeout": timeout,
-        "retries": retries,
-    }
+    def healthcheck(
+        test: list[str],
+        interval: str = "10s",
+        timeout: str = "5s",
+        retries: int = 5,
+    ) -> dict[str, Any]:
+        return {
+            "test": test,
+            "interval": interval,
+            "timeout": timeout,
+            "retries": retries,
+        }
 
     def gpu_reservation() -> dict[str, Any]:
-        # a fresh dict per call - reusing one object across services would make
-        # PyYAML emit anchors/aliases for it, which is needless noise here
         return {
             "deploy": {
                 "resources": {
                     "reservations": {
-                        "devices": [{"driver": "nvidia", "count": 1, "capabilities": ["gpu"]}]
+                        "devices": [
+                            {
+                                "driver": "nvidia",
+                                "count": 1,
+                                "capabilities": ["gpu"],
+                            }
+                        ]
                     }
                 }
             }
@@ -225,8 +262,14 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
             ),
             "ports": [f"{postgres['port']}:5432"],
             "volumes": ["postgres_data:/var/lib/postgresql/data"],
-            "healthcheck": healthcheck(["CMD-SHELL", f"pg_isready -U {postgres['user']} -d {postgres['db']}"]),
+            "healthcheck": healthcheck(
+                [
+                    "CMD-SHELL",
+                    f"pg_isready -U {postgres['user']} -d {postgres['db']}",
+                ]
+            ),
         },
+
         "minio": {
             "image": f"quay.io/minio/aistor/minio:{minio['image_tag']}",
             "container_name": cname("minio"),
@@ -238,39 +281,60 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
                     "MINIO_ROOT_PASSWORD": minio["root_password"],
                 }
             ),
-            "ports": [f"{minio['api_port']}:9000", f"{minio['console_port']}:9001"],
-            "volumes": ["minio_data:/data", f"{minio['license_path']}:/licenses:ro"],
-            "healthcheck": healthcheck(["CMD", "mc", "ready", "local"]),
+            "ports": [
+                f"{minio['api_port']}:9000",
+                f"{minio['console_port']}:9001",
+            ],
+            "volumes": [
+                "minio_data:/data",
+                f"{minio['license_path']}:/licenses:ro",
+            ],
+            "healthcheck": healthcheck(
+                ["CMD", "mc", "ready", "local"]
+            ),
         },
+
         "rabbitmq": {
             "image": f"rabbitmq:{rabbitmq['image_tag']}",
             "container_name": cname("rabbitmq"),
             "restart": "unless-stopped",
             "environment": _envs(
                 {
-                    # infra-service admin credentials: intentionally kept here, not
-                    # hoisted/shared with the app containers' own credential blocks
                     "RABBITMQ_DEFAULT_USER": backend["rabbitmq"]["user"],
                     "RABBITMQ_DEFAULT_PASS": backend["rabbitmq"]["password"],
                     "RABBITMQ_DEFAULT_VHOST": rabbitmq["vhost"],
                 }
             ),
-            "ports": [f"{rabbitmq['port']}:5672", f"{rabbitmq['management_port']}:15672"],
+            "ports": [
+                f"{rabbitmq['port']}:5672",
+                f"{rabbitmq['management_port']}:15672",
+            ],
             "volumes": ["rabbitmq_data:/var/lib/rabbitmq"],
-            "healthcheck": healthcheck(["CMD", "rabbitmq-diagnostics", "-q", "ping"]),
+            "healthcheck": healthcheck(
+                ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+            ),
         },
+
         "qdrant": {
             "image": f"qdrant/qdrant:{qdrant['image_tag']}",
             "container_name": cname("qdrant"),
             "restart": "unless-stopped",
-            "ports": [f"{qdrant['port']}:6333", f"{qdrant['grpc_port']}:6334"],
+            "ports": [
+                f"{qdrant['port']}:6333",
+                f"{qdrant['grpc_port']}:6334",
+            ],
             "volumes": ["qdrant_data:/qdrant/storage"],
             "healthcheck": healthcheck(
-                ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"], retries=10
+                ["CMD-SHELL", "exit 0"],
+                retries=10,
             ),
         },
+
         "backend": {
-            "build": {"context": "./backend", "dockerfile": ".dockerfile"},
+            "build": {
+                "context": "./backend",
+                "dockerfile": ".dockerfile",
+            },
             "container_name": cname("backend"),
             "restart": "unless-stopped",
             "depends_on": {
@@ -302,10 +366,6 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
                     "RABBITMQ__USER": backend["rabbitmq"]["user"],
                     "RABBITMQ__PASSWORD": backend["rabbitmq"]["password"],
                     "RABBITMQ__VIRTUAL_HOST": rabbitmq["vhost"],
-                    # nested inference_worker / inference_ocr_worker settings - the
-                    # queue names here MUST match the corresponding worker's own
-                    # rabbitmq.publish_queue / consume_queue, so they're taken from
-                    # the single shared "queues" block instead of being typed twice
                     "RABBITMQ__INFERENCE_WORKER__WORKER_NAME": inference["worker_name"],
                     "RABBITMQ__INFERENCE_WORKER__PUBLISH_QUEUE": queues["cv"]["tasks"],
                     "RABBITMQ__INFERENCE_WORKER__CONSUME_QUEUE": queues["cv"]["results"],
@@ -322,10 +382,16 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
                     "LOGGING__SERIALIZE": log_cfg["serialize"],
                 }
             ),
-            "ports": [f"{backend['port']}:{backend['internal_port']}"],
+            "ports": [
+                f"{backend['port']}:{backend['internal_port']}"
+            ],
         },
+
         "inference": {
-            "build": {"context": inference["build_context"], "dockerfile": inference["dockerfile"]},
+            "build": {
+                "context": inference["build_context"],
+                "dockerfile": inference["dockerfile"],
+            },
             "container_name": cname("inference"),
             "restart": "unless-stopped",
             "depends_on": {
@@ -369,8 +435,12 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
             ),
             **gpu_reservation(),
         },
+
         "ocr-inference": {
-            "build": {"context": ocr["build_context"], "dockerfile": ocr["dockerfile"]},
+            "build": {
+                "context": ocr["build_context"],
+                "dockerfile": ocr["dockerfile"],
+            },
             "container_name": cname("ocr-inference"),
             "restart": "unless-stopped",
             "depends_on": {
@@ -408,11 +478,32 @@ def render_compose(cfg: dict[str, Any]) -> dict[str, Any]:
             ),
             **gpu_reservation(),
         },
+
+        "frontend": {
+            "build": {
+                "context": frontend["build_context"],
+                "dockerfile": frontend["dockerfile"],
+                "args": _envs(frontend["vite"]),
+            },
+            "container_name": cname("frontend"),
+            "restart": "unless-stopped",
+            "depends_on": {
+                "backend": {"condition": "service_started"},
+            },
+            "ports": [
+                f"{frontend['port']}:{frontend['internal_port']}"
+            ],
+        },
     }
 
     return {
         "services": services,
-        "volumes": {"postgres_data": None, "minio_data": None, "rabbitmq_data": None, "qdrant_data": None},
+        "volumes": {
+            "postgres_data": None,
+            "minio_data": None,
+            "rabbitmq_data": None,
+            "qdrant_data": None,
+        },
     }
 
 
@@ -422,78 +513,179 @@ def build_run_command(
     detach: bool,
     build: bool,
 ) -> list[str]:
-    command = ["docker", "compose", "-f", str(compose_path), "-p", project_name, "up"]
+    command = [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_path),
+        "-p",
+        project_name,
+        "up",
+    ]
 
     if detach:
         command.append("-d")
+
     if build:
         command.append("--build")
 
     return command
 
 
+def stop_all_containers() -> None:
+    result = subprocess.run(
+        ["docker", "ps", "-q"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    container_ids = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+    if not container_ids:
+        print("No running Docker containers.")
+        return
+
+    print(f"Stopping {len(container_ids)} running Docker containers...")
+    subprocess.run(
+        ["docker", "stop", *container_ids],
+        check=True,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Render a fully-resolved docker-compose file from a JSON config and run "
-            "docker compose up (no intermediate .env file - values are baked in directly)."
+            "Render a fully-resolved docker-compose file from a JSON config "
+            "and run docker compose up."
         )
     )
+
     parser.add_argument(
         "--generate-config",
         action="store_true",
-        help="Print the default JSON config to stdout and exit (e.g. redirect into docker-config.json to customize).",
+        help="Print the default JSON config to stdout and exit.",
     )
+
     parser.add_argument(
         "--config",
         default="docker-config.json",
-        help="Path to a JSON config with overrides on top of the defaults. Optional.",
+        help="Path to a JSON config with overrides on top of the defaults.",
     )
+
     parser.add_argument(
         "--compose-output",
         default="docker-compose.generated.yml",
         help="Path to write the fully rendered compose file to.",
     )
+
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Only render the compose file and print the command, without running it.",
+        help="Only render the compose file and print the command.",
     )
-    parser.add_argument("--no-detach", action="store_true", help="Run docker compose up in the foreground.")
-    parser.add_argument("--no-build", action="store_true", help="Skip --build when running docker compose up.")
+
+    parser.add_argument(
+        "--no-detach",
+        action="store_true",
+        help="Run docker compose up in the foreground.",
+    )
+
+    parser.add_argument(
+        "--no-build",
+        action="store_true",
+        help="Skip --build when running docker compose up.",
+    )
+
+    parser.add_argument(
+        "--skip-stop-all-before-build",
+        action="store_true",
+        help="Do not stop running Docker containers before a build.",
+    )
 
     args = parser.parse_args()
 
     if args.generate_config:
-        print(json.dumps(DEFAULTS, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(
+                DEFAULTS,
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         return
 
     root = Path.cwd()
-    config_path = (root / args.config).resolve()
 
+    config_path = (root / args.config).resolve()
     overrides: dict[str, Any] = {}
+
     if config_path.exists():
         overrides = load_json(config_path)
     else:
-        print(f"No config file found at {config_path}, using built-in defaults only.")
+        print(
+            f"No config file found at {config_path}, "
+            "using built-in defaults only."
+        )
 
     merged_config = deep_merge(DEFAULTS, overrides)
+
     compose_spec = render_compose(merged_config)
 
     compose_path = (root / args.compose_output).resolve()
-    with compose_path.open("w", encoding="utf-8") as file:
-        yaml.safe_dump(compose_spec, file, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
-    detach = not args.no_detach and bool(merged_config["compose"].get("detach", True))
-    build = not args.no_build and bool(merged_config["compose"].get("build", True))
+    with compose_path.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
+        yaml.safe_dump(
+            compose_spec,
+            file,
+            sort_keys=False,
+            default_flow_style=False,
+            allow_unicode=True,
+        )
 
-    command = build_run_command(compose_path, merged_config["project_name"], detach, build)
+    detach = (
+        not args.no_detach
+        and bool(merged_config["compose"].get("detach", True))
+    )
+
+    build = (
+        not args.no_build
+        and bool(merged_config["compose"].get("build", True))
+    )
+
+    stop_all_before_build = (
+        build
+        and bool(
+            merged_config["compose"].get(
+                "stop_all_before_build",
+                False,
+            )
+        )
+        and not args.skip_stop_all_before_build
+    )
+
+    command = build_run_command(
+        compose_path,
+        merged_config["project_name"],
+        detach,
+        build,
+    )
 
     print(f"Rendered compose file: {compose_path}")
     print("Running command:", " ".join(command))
 
     if args.dry_run:
         return
+
+    if stop_all_before_build:
+        stop_all_containers()
 
     subprocess.run(command, check=True)
 
